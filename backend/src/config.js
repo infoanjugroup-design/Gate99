@@ -9,18 +9,19 @@ function need(name, fallback) {
 
 module.exports = {
   nocodb: {
-    url: need('NOCODB_URL', 'https://app.nocodb.com').replace(/\/+$/, ''),
-    token: need('NOCODB_API_TOKEN', 'nc_pat_sXAoZc6ps9aCIVBF69yvHML3rbUx5LZ1YpUrw0tN'),
+    url: need('NOCODB_URL', 'http://localhost:8080').replace(/\/+$/, ''),
+    token: need('NOCODB_API_TOKEN', ''),
     baseName: need('NOCODB_BASE_NAME', 'GATE99'),
-    baseId: need('NOCODB_BASE_ID', 'pdqt9l8tm9gvz0j').trim(),
+    baseId: need('NOCODB_BASE_ID', '').trim(),
   },
   server: {
     port: Number(need('PORT', 3000)),
   },
   email: {
-    user: need('EMAIL_USER', 'info.jagdeesh07@gmail.com'),
-    pass: need('EMAIL_PASS', 'lwnkgqfjozcitufa'),
+    user: need('EMAIL_USER', ''),
+    pass: need('EMAIL_PASS', ''),
     fromName: need('EMAIL_FROM_NAME', 'GATE99'),
+    brevoApiKey: need('BREVO_API_KEY', '').trim(),
   },
   uploads: {
     dir: need('UPLOAD_DIR', './uploads'),
