@@ -1,3 +1,4 @@
+
 const nodemailer = require('nodemailer');
 const { email } = require('./config');
 
@@ -8,6 +9,12 @@ function getTransporter() {
     transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: { user: email.user, pass: email.pass },
+      // Without these, a network hiccup or Gmail SMTP being unreachable
+      // can leave the whole request (and the frontend's "Sending OTP…")
+      // hanging indefinitely instead of returning an error.
+      connectionTimeout: 15000, // time to establish the TCP connection
+      greetingTimeout: 15000,   // time to get the SMTP greeting after connecting
+      socketTimeout: 20000,     // time of inactivity before killing the socket
     });
   }
   return transporter;
@@ -28,11 +35,22 @@ function emailTemplate(purpose, otp) {
   return fn ? fn(otp) : { subject: 'GATE99 — OTP', body: `Your OTP is: ${otp}` };
 }
 
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms)),
+  ]);
+}
+
 async function sendOtpEmail(to, purpose, otp) {
   const t = getTransporter();
   if (!t) throw new Error('Email is not configured — set EMAIL_USER/EMAIL_PASS in .env (see README).');
   const tpl = emailTemplate(purpose, otp);
-  await t.sendMail({ from: `"${email.fromName}" <${email.user}>`, to, subject: tpl.subject, text: tpl.body });
+  await withTimeout(
+    t.sendMail({ from: `"${email.fromName}" <${email.user}>`, to, subject: tpl.subject, text: tpl.body }),
+    25000,
+    'Sending OTP email'
+  );
 }
 
 async function sendPlainEmail(to, subject, body) {
