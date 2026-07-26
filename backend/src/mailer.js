@@ -1,23 +1,20 @@
 
-const nodemailer = require('nodemailer');
+const axios = require('axios');
 const { email } = require('./config');
 
-let transporter = null;
-function getTransporter() {
-  if (!email.user || !email.pass) return null;
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: email.user, pass: email.pass },
-      // Without these, a network hiccup or Gmail SMTP being unreachable
-      // can leave the whole request (and the frontend's "Sending OTP…")
-      // hanging indefinitely instead of returning an error.
-      connectionTimeout: 15000, // time to establish the TCP connection
-      greetingTimeout: 15000,   // time to get the SMTP greeting after connecting
-      socketTimeout: 20000,     // time of inactivity before killing the socket
-    });
-  }
-  return transporter;
+/* ---------------- Brevo (HTTP API) email sending ----------------
+   Render's free web services block ALL outbound SMTP traffic (ports
+   25, 465, 587) as of Sept 2025 — see:
+   https://render.com/changelog/free-web-services-will-no-longer-allow-outbound-traffic-to-smtp-ports
+   Gmail SMTP (nodemailer) can therefore NEVER connect from a free
+   Render service, no matter how correct the App Password is — the
+   connection is blocked at the network level before auth is even
+   attempted. Brevo's API runs over plain HTTPS (port 443), which is
+   NOT blocked, so we use that instead of SMTP.
+   Free Brevo plan: 300 emails/day, no card required. */
+
+function getBrevoKey() {
+  return email.brevoApiKey || null;
 }
 
 // purpose-specific templates — never reuse one template for a
@@ -35,29 +32,37 @@ function emailTemplate(purpose, otp) {
   return fn ? fn(otp) : { subject: 'GATE99 — OTP', body: `Your OTP is: ${otp}` };
 }
 
-function withTimeout(promise, ms, label) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms)),
-  ]);
-}
-
-async function sendOtpEmail(to, purpose, otp) {
-  const t = getTransporter();
-  if (!t) throw new Error('Email is not configured — set EMAIL_USER/EMAIL_PASS in .env (see README).');
-  const tpl = emailTemplate(purpose, otp);
-  await withTimeout(
-    t.sendMail({ from: `"${email.fromName}" <${email.user}>`, to, subject: tpl.subject, text: tpl.body }),
-    25000,
-    'Sending OTP email'
+async function sendViaBrevo(to, subject, text) {
+  const key = getBrevoKey();
+  if (!key) throw new Error('Email is not configured — set BREVO_API_KEY (and EMAIL_USER as the verified sender) in Render env vars.');
+  await axios.post(
+    'https://api.brevo.com/v3/smtp/email',
+    {
+      sender: { name: email.fromName, email: email.user },
+      to: [{ email: to }],
+      subject,
+      textContent: text,
+    },
+    {
+      headers: { 'api-key': key, 'Content-Type': 'application/json', Accept: 'application/json' },
+      timeout: 20000,
+    }
   );
 }
 
-async function sendPlainEmail(to, subject, body) {
-  const t = getTransporter();
-  if (!t) return false;
+async function sendOtpEmail(to, purpose, otp) {
+  const tpl = emailTemplate(purpose, otp);
   try {
-    await t.sendMail({ from: `"${email.fromName}" <${email.user}>`, to, subject, text: body });
+    await sendViaBrevo(to, tpl.subject, tpl.body);
+  } catch (e) {
+    const msg = e.response?.data?.message || e.message;
+    throw new Error(msg);
+  }
+}
+
+async function sendPlainEmail(to, subject, body) {
+  try {
+    await sendViaBrevo(to, subject, body);
     return true;
   } catch (e) {
     return false;
