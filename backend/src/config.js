@@ -8,8 +8,8 @@ function need(name, fallback) {
 
 module.exports = {
   nocodb: {
-    url: need('NOCODB_URL', 'http://localhost:8080').replace(/\/+$/, ''),
-    token: need('NOCODB_API_TOKEN', ''),
+    url: need('NOCODB_URL', 'https://app.nocodb.com/wvhqo7l8/pdqt9l8tm9gvz0j').replace(/\/+$/, ''),
+    token: need('NOCODB_API_TOKEN', 'nc_pat_sXAoZc6ps9aCIVBF69yvHML3rbUx5LZ1YpUrw0tN'),
     baseName: need('NOCODB_BASE_NAME', 'GATE99'),
   },
   server: {
