@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
-const { server, uploads } = require('./config');
+const { server, uploads, nocodb: nocodbConfig } = require('./config');
 const nc = require('./nocodb');
 const { route } = require('./actions');
 
@@ -12,10 +12,6 @@ app.use(express.json({ limit: '25mb' })); // base64 file uploads ride in the JSO
 fs.mkdirSync(uploads.dir, { recursive: true });
 app.use('/uploads', express.static(uploads.dir));
 
-// This is the ONE endpoint your existing frontend already calls — it
-// pastes this server's URL into the same "Database URL" box that used
-// to hold the Apps Script /exec URL. Same request/response contract:
-// POST { action, ...params } -> { status: 'success'|'error', message, data }
 app.post(['/', '/exec'], async (req, res) => {
   try {
     const out = await route(req.body || {});
@@ -27,10 +23,20 @@ app.post(['/', '/exec'], async (req, res) => {
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
+app.get('/setup-tables', async (req, res) => {
+  try {
+    const manualBaseId = req.query.baseId || null;
+    const result = await nc.ensureAllTables(manualBaseId);
+    res.json({ status: 'success', message: 'All tables ready in NocoDB.', data: result });
+  } catch (e) {
+    res.json({ status: 'error', message: e.response?.data?.message || e.message });
+  }
+});
+
 async function start() {
   console.log('Connecting to NocoDB and ensuring all tables exist...');
   try {
-    await nc.ensureAllTables();
+    await nc.ensureAllTables(nocodbConfig.baseId || null);
     console.log('✓ All tables ready in NocoDB.');
   } catch (e) {
     console.error('✗ Could not set up NocoDB tables on boot:', e.response?.data || e.message);
